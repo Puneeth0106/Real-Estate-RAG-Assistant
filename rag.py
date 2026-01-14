@@ -67,17 +67,18 @@ def process_urls(urls):
     :param urls: input urls
     :return : index documents
     """
-    print("Initializing components: ")
+    yield"Initializing components: "
     initialize_components()
 
-    print("Erasing existing storage in the Vector store")
+    yield "Erasing existing storage in the Vector store"
     vector_store.reset_collection()
 
-    print("Loading Documents")
+    yield "Loading Documents"
     loader= WebBaseLoader(urls)
     data= loader.load()
+    # print(f"Loaded {len(data)} documents. First 100 characters: {data[0].page_content[:100]}")
     
-    print("Splitting text")
+    yield "Splitting text"
     text_splitter= RecursiveCharacterTextSplitter(
         separators=['\n\n','\n','.',' '],
         chunk_size= chunck_size
@@ -95,36 +96,47 @@ def format_context(docs):
     return context
 
 def generate_answers(query):
-    print("Generating answer for the given query")
+    if not vector_store:
+        raise RuntimeError("Vector database is not initialized")
 
-    print(">> Initializing the retriever")
+    #yield "Generating answer for the given query"
+
+    #yield">> Initializing the retriever"
     retriever= vector_store.as_retriever(search_type='similarity', search_kwargs={'k':2})
-    print(">> Fetching relevent documents using retriever")
-    docs= vector_store.similarity_search(query=query,k=2)
-    print(">> Joining text using format_context function")
-    context= format_context(docs)
+    #yield">> Fetching relevent documents using retriever"
+    docs= vector_store.similarity_search(query=query,k=4)
+    # yield">> Joining text using format_context function"
+    context = format_context(docs)
+    # print("--- DEBUG: CONTEXT SENT TO LLM ---")
+    # print(context) 
+    # print("---------------------------------")
 
     parallel_chain= RunnableParallel(
         {'question': RunnablePassthrough(),
          'context': retriever | RunnableLambda(format_context)
         }
     )
-    print(">> Initializing the final chain")
+    # yield">> Initializing the final chain"
     final_chain= parallel_chain | prompt | llm | output_parser
-    print(">> Invoking the final chain with query")
+    # yield">> Invoking the final chain with query"
     response= final_chain.invoke(query)
-
     # source= response.get("sources", "")
-    return response
+    yield  response
 
 
 
 if __name__ == "__main__":
-    urls= ['https://blog.fabric.microsoft.com/en-US/blog/announcing-the-winners-of-hack-together-the-microsoft-data-ai-kenya-hack/']
-    print("Processing the urls")
+    urls = ['https://blog.fabric.microsoft.com/en-US/blog/announcing-the-winners-of-hack-together-the-microsoft-data-ai-kenya-hack/']
     process_urls(urls)
-    print("Generating Answers")
-    response= generate_answers("Which team got the first price in microsoft fabcon")
-    print(f'Answer: {response}')
-    # print(f'Source: {source}')
+    
+    print("\n--- Generating Result ---")
+    query = "What is The Microsoft Data + AI Kenya Hack"
+    
+    # Loop through the generator to see status and get the final result
+    result = None
+    for step in generate_answers(query):
+        print(step)  # This shows your ">>" status updates in the console
+        result = step # The very last thing yielded will be stored here
+    
+    print(f'\nFinal Answer: {result}')
 

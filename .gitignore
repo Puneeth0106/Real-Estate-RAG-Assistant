@@ -2,3 +2,4 @@
 resources
 .env
 resources/vectorstore/
+__pycache__
